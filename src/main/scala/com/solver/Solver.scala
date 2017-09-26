@@ -3,16 +3,19 @@ package com.solver
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
   */
-sealed trait Direction
-case object Row extends Direction
-case object Column extends Direction
 
-case class Point(row: Byte, column: Byte)
-case class Edge(point1: Point, point2: Point, direction: Direction)
+case class Point(row: Byte, column: Byte) extends Ordered[Point] {
+  import scala.math.Ordered.orderingToOrdered
 
-sealed trait Tree
-case class Leaf(value: Point) extends Tree
-case class Branch(row: List[Point], column: List[Point]) extends Tree
+  def compare(that: Point): Int = (this.row, this.column) compare (that.row, that.column)
+}
+
+sealed trait Graph
+sealed trait RowTrait extends Graph
+sealed trait ColumnTrait extends Graph
+case class Row(point: Point, columnList: List[Column]) extends RowTrait
+case class Column(point: Point, rowList: List[Row]) extends ColumnTrait
+case class Head(point: Point, columnList: List[Column], rowList: List[Row]) extends RowTrait with ColumnTrait
 
 
 class Solver(private val matrix: Matrix) {
@@ -24,35 +27,58 @@ class Solver(private val matrix: Matrix) {
 
   def findCoincidence(): Unit = (for (i <- 0 until size; j <- 0 until size ) yield
     (matrix.get(i, j), (i, j)))
+    /*
+    Group by value
+     */
     .foldLeft(Map.empty[Byte,List[(Byte,Byte)]]) {
       case(acc, (value, (row, column))) =>
         acc + ((value, (row.toByte, column.toByte) :: acc.getOrElse(value, List.empty[(Byte, Byte)])))
-    }.map {
+    }
+    /*
+    Transform to Map Row -> List[Column] and Column -> List[Row]
+     */
+    .map {
       case (value, list) => (
         value,
         list.foldLeft(Map.empty[Byte, List[Byte]], Map.empty[Byte, List[Byte]]) {
           case ((rowMap, columnMap), (rowIdx, columnIdx)) =>
-            val newRowMap = rowMap + ((rowIdx, columnIdx :: rowMap.getOrElse(rowIdx, List.empty[Byte])))
-            val newColumnMap = columnMap + ((columnIdx, rowIdx :: columnMap.getOrElse(columnIdx, List.empty[Byte])))
-            (newRowMap, newColumnMap)
+            (
+              rowMap + ((rowIdx, columnIdx :: rowMap.getOrElse(rowIdx, List.empty[Byte]))),
+              columnMap + ((columnIdx, rowIdx :: columnMap.getOrElse(columnIdx, List.empty[Byte])))
+            )
         }
       )
-    }.map {
-      case(value, (rowMap: Map[Byte, List[Byte]], columnMap: Map[Byte, List[Byte]])) =>
-        val filteredRowMap = rowMap.filter {
-          case (_, columnIdxList) => columnIdxList.length > 1
-        }
-        val filteredColumnMap = columnMap.filter {
-          case (_, rowIdxList) => rowIdxList.length > 1
-        }
-        val rowList = filteredRowMap.toList.sortBy {
-          case (rowIdx, columnIdxList) => rowIdx
-        }
-        println(s"Value: $value")
-        println(rowList.mkString("\n"))
-        //println(filteredColumnMap)
-        (filteredRowMap, filteredColumnMap)
     }
+    /*
+    Filter only coincidence case
+     */
+    .map {
+      case(value, (rowMap: Map[Byte, List[Byte]], columnMap: Map[Byte, List[Byte]])) =>
+        (
+          value,
+          rowMap.filter { case (_, columnIdxList) => columnIdxList.length > 1 },
+          columnMap.filter { case (_, rowIdxList) => rowIdxList.length > 1 }
+        )
+    }
+    /*
+    Collect map indexes
+     */
+    .map {
+      case(value, rowMap: Map[Byte, List[Byte]], columnMap: Map[Byte, List[Byte]]) =>
+        val pointSet = rowMap.toList.flatMap { case (row, listColumn) => listColumn.map(Point(row, _)) }.toSet ++
+        columnMap.toList.flatMap {case (column, listRow) => listRow.map(Point(_, column))}.toSet
+
+
+        println(s"Value: $value")
+        //println(rowList.mkString("\n"))
+        println(pointSet.toList.sorted)
+
+      1
+    }
+
+  def buildGraph(listPoint: List[Point]): List[Graph] = {
+    def buildGraphRec(graph: Graph, listPoint: List[Point]): Graph =
+  }
 
   /*
   Encode rows or columns in bit representation (1-black, 0-white).
