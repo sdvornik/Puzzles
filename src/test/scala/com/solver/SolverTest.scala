@@ -8,7 +8,7 @@ import org.scalatest._
 import org.scalatest.check.Checkers
 
 class SolverTest  extends FunSuite with Checkers {
-
+/*
   test("Check line numbers conversion") {
     import Solver._
     val numbers1: Set[Int] = findLineNumbers(findCoincidence(Vector(0,2,2)), 3).toSet
@@ -32,6 +32,7 @@ class SolverTest  extends FunSuite with Checkers {
     println(res)
     //assert(res)
   }
+  */
 /*
   test("Check generate board") {
     import Solver._
