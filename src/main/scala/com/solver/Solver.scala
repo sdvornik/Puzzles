@@ -25,7 +25,7 @@ class Solver(private val matrix: Matrix) {
   Find coincide number in row or column.
    */
 
-  def findCoincidence(): Unit = (for (i <- 0 until size; j <- 0 until size ) yield
+  def buildGraphList: List[Graph] = (for (i <- 0 until size; j <- 0 until size ) yield
     (matrix.get(i, j), (i, j)))
     /*
     Group by value
@@ -61,24 +61,108 @@ class Solver(private val matrix: Matrix) {
         )
     }
     /*
-    Collect map indexes
+    Build Graph list
      */
-    .map {
+    .flatMap {
       case(value, rowMap: Map[Byte, List[Byte]], columnMap: Map[Byte, List[Byte]]) =>
         val pointSet = rowMap.toList.flatMap { case (row, listColumn) => listColumn.map(Point(row, _)) }.toSet ++
-        columnMap.toList.flatMap {case (column, listRow) => listRow.map(Point(_, column))}.toSet
+        columnMap.toList.flatMap { case (column, listRow) => listRow.map(Point(_, column)) }.toSet
+        println()
+        println(s"____________________________Value: $value")
 
-
-        println(s"Value: $value")
-        //println(rowList.mkString("\n"))
         println(pointSet.toList.sorted)
-
-      1
+        val res = buildGraph(pointSet.toList.sorted, rowMap, columnMap)
+       println(res)
+      res
     }
+    .toList
 
-  def buildGraph(listPoint: List[Point]): List[Graph] = {
-    def buildGraphRec(graph: Graph, listPoint: List[Point]): Graph =
+  def buildGraph(pointList: List[Point], rowMap: Map[Byte, List[Byte]], columnMap: Map[Byte, List[Byte]]): List[Graph] = {
+
+    def buildColumnGraph(columnPointList: List[Point], remainingPointSet: Set[Point]): (List[Column], Set[Point]) = columnPointList
+      .foldLeft((List.empty[Column], remainingPointSet)) {
+        case ((graphListAcc, remainingPointSetAcc), point @ Point(row, column)) =>
+          println(s"Call buildColumnGraph at point $point")
+
+          val newRemainingPointSet = remainingPointSetAcc - point
+
+          val rowPointList = rowMap.getOrElse(row, List.empty).map(Point(row, _)).toSet.intersect(newRemainingPointSet).toList
+
+          println(s"rowPointList $rowPointList")
+          val rowGraphTuple = buildRowGraph(rowPointList, newRemainingPointSet)
+
+
+          val newGraph = Column(point, rowGraphTuple._1)
+
+          val points: List[Column] = foldGraph(newGraph, List.empty[Column]){
+            case (acc, graph) =>
+              // compare point to graph points
+              null
+          }
+          val newGraphListAcc = newGraph :: graphListAcc
+
+          (newGraphListAcc, rowGraphTuple._2)
+
+      }
+
+    def buildRowGraph(rowPointList: List[Point], remainingPointSet: Set[Point]): (List[Row], Set[Point]) = rowPointList
+      .foldLeft((List.empty[Row], remainingPointSet)) {
+        case ((graphListAcc, remainingPointSetAcc), point @ Point(row, column)) =>
+          println(s"Call buildRowGraph at point $point")
+
+          val newRemainingPointSet = remainingPointSetAcc - point
+
+          val columnPointList = columnMap.getOrElse(column, List.empty).map(Point(_, column)).toSet.intersect(newRemainingPointSet).toList
+
+          println(s"columnPointList $columnPointList")
+          val rowGraphTuple = buildColumnGraph(columnPointList, newRemainingPointSet)
+
+          val newGraphListAcc = Row(point, rowGraphTuple._1) :: graphListAcc
+
+          (newGraphListAcc, rowGraphTuple._2)
+
+      }
+
+    def buildGraphRec(graphList: List[Graph], pointList: List[Point]): (List[Graph], List[Point]) = pointList match {
+
+      case (rootPoint @ Point(row, column)) :: xs =>
+        val remainingPointSet = xs.toSet
+        println()
+        println(s"********************Execute buildGraphRec at point $rootPoint")
+        val rowPointList = (rowMap.getOrElse(row, List.empty).map(Point(row, _)).toSet - rootPoint).toList
+
+        val columnPointList = (columnMap.getOrElse(column, List.empty).map(Point(_, column)).toSet - rootPoint).toList
+
+        val columnGraphTuple: (List[Column], Set[Point]) = buildColumnGraph(columnPointList: List[Point], remainingPointSet)
+        val rowGraphTuple: (List[Row], Set[Point]) = buildRowGraph(rowPointList: List[Point], columnGraphTuple._2)
+
+        val newGraphList = Head(rootPoint, columnGraphTuple._1, rowGraphTuple._1) :: graphList
+        println(s"********************Build head graph $newGraphList")
+        buildGraphRec(newGraphList, rowGraphTuple._2.toList.sorted)
+
+      case Nil => (graphList, pointList)
+    }
+    buildGraphRec(List.empty[Graph], pointList)._1
   }
+
+  def traverseGraph(graph: Graph): Unit = {
+    graph match {
+      case Row(point, columnList) => columnList.foreach(traverseGraph)
+      case Column(point, rowList) => rowList.foreach(traverseGraph)
+      case Head(point, columnList, rowList) =>
+        columnList.foreach(traverseGraph)
+        rowList.foreach(traverseGraph)
+    }
+  }
+
+  def foldGraph[A](graph: Graph, acc: A)(f: (A, Graph) => A): A = graph match {
+    case Row(point, columnList) => columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+    case Column(point, rowList) => rowList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+    case Head(point, columnList, rowList) =>
+      val newAcc = columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+      rowList.foldLeft(newAcc)((acc, g) => foldGraph(g, acc)(f))
+  }
+
 
   /*
   Encode rows or columns in bit representation (1-black, 0-white).

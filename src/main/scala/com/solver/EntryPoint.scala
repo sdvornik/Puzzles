@@ -34,7 +34,7 @@ object EntryPoint extends App {
  */
   val matrix = new Matrix(puzzle12)
   val solver = new Solver(matrix)
-  solver.findCoincidence()
+  solver.buildGraphList()
   /*
   val matrix = new Matrix(puzzle5)
   val matrixT = matrix.transpose
