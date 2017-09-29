@@ -19,13 +19,16 @@ class SolverTest  extends FunSuite with Checkers {
     assert(numbers2 == controlSet2)
 
   }
-
+*/
   test("Check board check") {
-    import Solver._
-    val res: Boolean = checkBoard((List(5,2,5), List(5,2,5)))
-    assert(res)
-  }
+    val first = List(1,2,3)
+    val second = List(4,5,6)
 
+    val res = second.map( l => l::first)
+    println(res)
+    assert(true)
+  }
+/*
   test("Check combine func") {
     import Solver._
     val res: (List[Int], List[Int]) = combineColumnAndRows(List(1,1,1), List(1,1,1), 3)

@@ -32,9 +32,15 @@ object EntryPoint extends App {
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle12)
+  val matrix = new Matrix(puzzle5)
   val solver = new Solver(matrix)
-  solver.buildGraphList()
+  val graphMap: Map[Head, Set[Point]] = solver.buildGraphMap
+  val variants: List[List[Point]] = solver.generateBoard(graphMap)
+  println(variants.size)
+  solver.outputPoint(variants(0))
+  println()
+  solver.outputPoint(variants(1))
+
   /*
   val matrix = new Matrix(puzzle5)
   val matrixT = matrix.transpose
