@@ -178,6 +178,18 @@ class Solver(private val matrix: Matrix) {
       rowList.foldLeft(newAcc)((acc, g) => foldGraph(g, acc)(f))
   }
 
+  def combineVariants(listOfVariants: List[List[List[Point]]]): List[List[Point]] = listOfVariants
+    .foldLeft(List.empty: List[List[Point]]) {
+      case (acc: List[List[Point]], listElm: List[List[Point]]) =>
+        acc match {
+          case x :: xs => for(
+            list: List[Point] <- listElm;
+            accList: List[Point] <- acc
+          ) yield accList ++ list
+          case Nil => listElm
+        }
+    }
+
   def generateBoard(graphMap: Map[Head, Set[Point]]): List[List[Point]] = {
 
     def generate(color: Color, graph: Graph): List[List[Point]] = {
@@ -190,15 +202,14 @@ class Solver(private val matrix: Matrix) {
       color match {
         case White =>
           val blackList: List[Graph] = childNodeList._1 ++ childNodeList._2
-          if(blackList.isEmpty) List.empty
-          else {
-            println(s"BLACK_LIST ${blackList.map(_.point)}___________________________________")
 
-            var res: List[List[Point]] = blackList.flatMap(g => blackList.map(_.point) :: generate(Black, g))
+          println(s"BLACK_LIST ${blackList.map(_.point)}___________________________________")
 
-            println(s"BLACK OUTPUT:\n$res")
-            res
-          }
+          var res: List[List[Point]] = combineVariants(blackList.map(g => generate(Black, g)))
+
+          println(s"BLACK OUTPUT:\n$res")
+          res
+
         case Black =>
           def processList(graphList: List[Graph]): List[(Graph, List[Graph])] = graphList
             .combinations(1).map(l => (l.head, (graphList.toSet -- l.toSet).toList)).toList
@@ -208,43 +219,25 @@ class Solver(private val matrix: Matrix) {
             columnGen <- processList(childNodeList._2)
           ) yield (rowGen, columnGen)
 
-          if(allPossibilities.isEmpty) List.empty
-          else {
+          println(s"allPossibilities $allPossibilities")
 
-            println(s"allPossibilities $allPossibilities")
+          val res: List[List[Point]] = allPossibilities.flatMap {
+            case ((whiteRowNode, blackRowNodeList), (whiteColumnNode, blackColumnNodeList)) =>
 
-            val res: List[List[Point]] = allPossibilities.flatMap {
-              case ((whiteRowNode, blackRowNodeList), (whiteColumnNode, blackColumnNodeList)) =>
+              val blackList: List[Graph] = blackRowNodeList ++ blackColumnNodeList
 
-                val blackList: List[Graph] = blackRowNodeList ++ blackColumnNodeList
+              blackList.flatMap(g => blackList.map(_.point) :: (generate(Black, g) ++ generate(White, whiteRowNode) ++ generate(White, whiteColumnNode)))
 
-                blackList.flatMap(g => blackList.map(_.point) :: (generate(Black, g) ++ generate(White, whiteRowNode) ++ generate(White, whiteColumnNode)))
-
-            }
-            println(s"WHITE OUTPUT:\n$res")
-            res
           }
+          println(s"WHITE OUTPUT:\n$res")
+          res
+
       }
     }
 
-    val possibleColors = Vector(White, Black)
-    graphMap.keys.foldLeft(List.empty: List[List[Point]])(
-      (accVariantList, rootGraph) => {
-
-        val graphVariantList: List[List[Point]] = generate(Black, rootGraph).map(rootGraph.point :: _) ++ generate(White, rootGraph)
-        accVariantList match {
-          case list @ x :: xs =>
-            for(
-              graphVariant <- graphVariantList;
-              accVariant <- list
-            ) yield graphVariant ++ accVariant
-          case Nil => graphVariantList
-        }
-      }
-    )
-
-
-
+    combineVariants(graphMap.keys.map( rootGraph =>
+          combineVariants(List(generate(Black, rootGraph), generate(White, rootGraph)))
+    ).toList)
 
   }
   /*
