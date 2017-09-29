@@ -36,30 +36,16 @@ object EntryPoint extends App {
   val solver = new Solver(matrix)
   val graphMap: Map[Head, Set[Point]] = solver.buildGraphMap
   val variants: List[List[Point]] = solver.generateBoard(graphMap)
+
   println(variants.size)
-  solver.outputPoint(variants(0))
-  println()
-  solver.outputPoint(variants(1))
 
-  /*
-  val matrix = new Matrix(puzzle5)
-  val matrixT = matrix.transpose
-  val size = matrix.size
+  val bitRepresentation = new BitBoardRepresentation(matrix.size)
+  variants.foreach { variant =>
+    solver.outputPoint(variant)
+    bitRepresentation.add(variant)
+    println(bitRepresentation.check)
+    bitRepresentation.clear()
+    println()
 
-  val solver = new Solver(matrix)
-  import solver._
-
-  val columns: List[List[Int]] = (0 until size).map(matrix.get).map(findCoincidence).map(findLineNumbers(_,size)).toList
-  println(columns)
-  val rows: List[List[Int]] = (0 until size).map(matrixT.get).map(findCoincidence).map(findLineNumbers(_,size)).toList
-  println(rows)
-
-  val boards: List[(List[Int], List[Int])] = generateBoard(columns, rows)
-
-
-
-  boards.map {
-    case(columnsV, rowsV) => combineColumnAndRows(columnsV, rowsV, size)
-  }.map(checkBoard)
-  */
+  }
 }

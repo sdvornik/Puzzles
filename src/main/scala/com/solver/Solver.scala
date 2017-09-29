@@ -1,5 +1,7 @@
 package com.solver
 
+import java.util
+
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
   */
@@ -21,6 +23,37 @@ sealed trait Color
 case object White extends Color
 case object Black extends Color
 
+class BitBoardRepresentation(private val size: Int) {
+
+  private val rowArr = new Array[Int](size)
+  private val columnArr = new Array[Int](size)
+
+  private def add(point: Point): Unit = point match {
+    case Point(row, column) =>
+      rowArr(row) = rowArr(row) |  1 << (size-1-column)
+      columnArr(column) = columnArr(column) |  1 << (size-1-row)
+  }
+
+  def add(listPoint: List[Point]): Unit = listPoint.foreach(p => add(p))
+
+  def check: Boolean = rowArr.drop(1).zip(rowArr).forall { case (a,b) => (a & b) == 0 } &&
+    columnArr.drop(1).zip(columnArr).forall { case (a,b) => (a & b) == 0 }
+
+  def clear(): Unit = {
+    util.Arrays.fill(rowArr, 0)
+    util.Arrays.fill(columnArr, 0)
+  }
+}
+
+class Matrix(private val matrix: Array[Array[Byte]]) {
+  require(matrix.nonEmpty && matrix.forall(l => l.length == matrix.length))
+
+  val size: Int = matrix.length
+
+  def get(rowIdx: Int): Vector[Byte] = matrix(rowIdx).toVector
+
+  def get(rowIdx: Int, columnIdx: Int): Byte = matrix(rowIdx)(columnIdx)
+}
 
 class Solver(private val matrix: Matrix) {
   private val size = matrix.size
@@ -57,29 +90,25 @@ class Solver(private val matrix: Matrix) {
     Filter only coincidence case
      */
     .map {
-      case(value, (rowMap, columnMap)) =>
+      case(_, (rowMap, columnMap)) =>
         (
-          value,
           rowMap.filter { case (_, columnIdxList) => columnIdxList.length > 1 },
           columnMap.filter { case (_, rowIdxList) => rowIdxList.length > 1 }
         )
     }
-    .filter { case(value, rowMap, columnMap) => rowMap.nonEmpty || columnMap.nonEmpty }
+    .filter { case(rowMap, columnMap) => rowMap.nonEmpty || columnMap.nonEmpty }
     /*
     Build Graph list
      */
     .flatMap {
-      case(value, rowMap, columnMap) =>
+      case(rowMap, columnMap) =>
         val pointList = (
           rowMap.flatMap { case (row, listColumn) => listColumn.map(Point(row, _)) } ++
           columnMap.flatMap { case (column, listRow) => listRow.map(Point(_, column)) }
         ).toSet.toList.sorted
-        println(s"Value: $value ____________________________")
         println(pointList)
-
-        val res = buildGraph(pointList, rowMap, columnMap)
         println()
-        res
+        buildGraph(pointList, rowMap, columnMap)
     }.toMap
 
   def buildGraph(
@@ -160,164 +189,48 @@ class Solver(private val matrix: Matrix) {
       }
   }
 
-  def traverseGraph(graph: Graph): Unit = {
-    graph match {
-      case Row(point, columnList) => columnList.foreach(traverseGraph)
-      case Column(point, rowList) => rowList.foreach(traverseGraph)
-      case Head(point, columnList, rowList) =>
-        columnList.foreach(traverseGraph)
-        rowList.foreach(traverseGraph)
-    }
-  }
-
-  def foldGraph[A](graph: Graph, acc: A)(f: (A, Graph) => A): A = graph match {
-    case Row(_, columnList) => columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-    case Column(_, rowList) => rowList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-    case Head(_, columnList, rowList) =>
-      val newAcc = columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-      rowList.foldLeft(newAcc)((acc, g) => foldGraph(g, acc)(f))
-  }
-
   def combineVariants(listOfVariants: List[List[List[Point]]]): List[List[Point]] = listOfVariants
     .foldLeft(List.empty: List[List[Point]]) {
       case (acc: List[List[Point]], listElm: List[List[Point]]) =>
         acc match {
-          case x :: xs => for(
-            list: List[Point] <- listElm;
-            accList: List[Point] <- acc
-          ) yield accList ++ list
+          case newAcc @ x :: xs => newAcc.flatMap(accElm => listElm.map( listElmElm => listElmElm ++ accElm))
           case Nil => listElm
         }
     }
 
+  def processList(graphList: List[Graph]): List[(Graph, List[Graph])] = graphList
+    .combinations(1).map(l => (l.head, (graphList.toSet -- l.toSet).toList)).toList
+
   def generateBoard(graphMap: Map[Head, Set[Point]]): List[List[Point]] = {
 
     def generate(color: Color, graph: Graph): List[List[Point]] = {
-
-      val childNodeList = graph match {
+      val (childRowNodeList, childColumnNodeList) = graph match {
         case row: Row => (List.empty, row.columnList)
         case column: Column => (column.rowList, List.empty)
         case head: Head => (head.rowList, head.columnList)
       }
       color match {
         case White =>
-          val blackList: List[Graph] = childNodeList._1 ++ childNodeList._2
-
-          println(s"BLACK_LIST ${blackList.map(_.point)}___________________________________")
-
-          var res: List[List[Point]] = combineVariants(blackList.map(g => generate(Black, g)))
-
-          println(s"BLACK OUTPUT:\n$res")
-          res
+          (childRowNodeList ++ childColumnNodeList).flatMap(g => generate(Black, g))
 
         case Black =>
-          def processList(graphList: List[Graph]): List[(Graph, List[Graph])] = graphList
-            .combinations(1).map(l => (l.head, (graphList.toSet -- l.toSet).toList)).toList
 
-          val allPossibilities: List[((Graph, List[Graph]), (Graph, List[Graph]))] = for (
-            rowGen <- processList(childNodeList._1);
-            columnGen <- processList(childNodeList._2)
-          ) yield (rowGen, columnGen)
-
-          println(s"allPossibilities $allPossibilities")
-
-          val res: List[List[Point]] = allPossibilities.flatMap {
-            case ((whiteRowNode, blackRowNodeList), (whiteColumnNode, blackColumnNodeList)) =>
-
-              val blackList: List[Graph] = blackRowNodeList ++ blackColumnNodeList
-
-              blackList.flatMap(g => blackList.map(_.point) :: (generate(Black, g) ++ generate(White, whiteRowNode) ++ generate(White, whiteColumnNode)))
-
+          val rowList: List[List[List[Point]]] = processList(childRowNodeList).map {
+            case (whiteRowNode, blackRowNodeList) =>
+              generate(White, whiteRowNode) ++ blackRowNodeList.flatMap( blackRowNode => generate(Black, blackRowNode))
           }
-          println(s"WHITE OUTPUT:\n$res")
-          res
 
+          val columnList: List[List[List[Point]]] = processList(childColumnNodeList).map {
+            case (whiteColumnNode, blackColumnNodeList) =>
+              generate(White, whiteColumnNode) ++ blackColumnNodeList.flatMap( blackColumnNode => generate(Black, blackColumnNode))
+          }
+
+          val res: List[List[Point]] = combineVariants(rowList ++ columnList).map(list => graph.point :: list)
+          if(res.isEmpty) List(List(graph.point)) else res
       }
     }
 
-    combineVariants(graphMap.keys.map( rootGraph =>
-          combineVariants(List(generate(Black, rootGraph), generate(White, rootGraph)))
-    ).toList)
-
-  }
-  /*
-  Encode rows or columns in bit representation (1-black, 0-white).
-   */
-  def findLineNumbers(list: List[List[Int]]): List[Int] = {
-
-    def findLineNumbersRec(list: List[List[Int]], acc: List[Int]): List[Int] = list match {
-      case x::xs =>
-        val newAcc: List[Int] = acc.flatMap(accElm =>
-          x.map(v => 1 << (size-1-v) | accElm )
-        )
-        findLineNumbersRec(xs, newAcc)
-      case Nil => acc
-    }
-    findLineNumbersRec(list, List(0))
-  }
-
-  def generateBoard(columnsVariants: List[List[Int]], rowsVariants: List[List[Int]]): List[(List[Int], List[Int])] = {
-
-    def generate(list: List[List[Int]], acc: List[List[Int]]): List[List[Int]] = list match {
-      case head::tail =>
-        val newAcc: List[List[Int]] = head.flatMap(l => acc.map(x => l::x))
-        generate(tail, newAcc)
-      case Nil => acc
-    }
-
-    val column = generate(columnsVariants, List(List.empty[Int]))
-    val row = generate(rowsVariants, List(List.empty[Int]))
-
-    column.flatMap( (x: List[Int]) => row.map((y: List[Int]) => (x,y)))
-  }
-
-  def combineColumnAndRows(columns: List[Int], rows: List[Int]): (List[Int], List[Int]) = {
-
-    val matrixList: List[(Byte, Byte, Boolean)] = columns.zipWithIndex
-      .foldLeft(List.empty[(Byte, Byte, Boolean)]) { case (acc, (columnElm, idxColumn)) =>
-        rows.zipWithIndex.foldLeft(acc) { case (a, (rowElm, idxRow)) =>
-          (idxColumn.toByte, idxRow.toByte, (1 << (size-1-idxRow) & columnElm) != 0 || (1 << (size-1-idxColumn) & rowElm) != 0) :: a
-        }
-      }
-
-    matrixList
-      .foldLeft((Map.empty[Byte, List[(Byte, Boolean)]], Map.empty[Byte, List[(Byte, Boolean)]])) {
-        case (acc, (idxColumn, idxRow, bitValue) ) =>
-          val columnMap = acc._1
-          val rowMap = acc._2
-          (
-            columnMap + ((idxColumn, (idxRow, bitValue) :: columnMap.getOrElse(idxColumn, List.empty[(Byte, Boolean)]))),
-            rowMap + ((idxRow, (idxColumn, bitValue) :: rowMap.getOrElse(idxRow, List.empty[(Byte, Boolean)])))
-          )
-      } match {
-      case (columnMap, rowMap) => (
-        columnMap.toList.sortBy { case (id, _) => id }.map { case (_, list) => list.foldLeft(0) {
-          case (acc,(idx, isValue)) =>
-            if(isValue) acc | (1 << (size-1-idx)) else acc
-        }},
-        rowMap.toList.sortBy { case (id, _) => id }.map { case (_, list) => list.foldLeft(0) {
-          case (acc,(idx, isValue)) =>
-            if(isValue) acc | (1 << (size-1-idx)) else acc
-        }}
-      )
-    }
-  }
-
-  def checkLines(linesList: List[Int]): Boolean = linesList.zip(linesList.drop(1)).forall { case(first, second) => (first & second) == 0 }
-
-  def checkBoard(board: (List[Int], List[Int])): Boolean = board match {
-    case (columnList, rowList) =>
-      if(columnList.zip(columnList.drop(1)).forall { case(first, second) => (first & second) == 0 } &&
-        rowList.zip(rowList.drop(1)).forall { case(first, second) => (first & second) == 0 }) { output(columnList); true}
-      else false
-  }
-
-  def output(res: List[Int]): Unit = {
-    (0 until size).foreach(i => {
-      val number = res(i)
-      (0 until size).foreach(k => if(((1 << (size-1-k))& number) == 0) print(0+" ") else print(1+" ") )
-      println()
-    })
+    combineVariants(graphMap.keys.map( rootGraph => generate(Black, rootGraph) ++ generate(White, rootGraph)).toList)
   }
 
   def outputPoint(res: List[Point]): Unit = {
@@ -329,10 +242,20 @@ class Solver(private val matrix: Matrix) {
       point => {
         if(set.contains(point)) print(" 1 ")
         else print(" 0 ")
-        if(point.column == size -1 ) println()
+        if(point.column == size - 1 ) println()
       }
     )
 
   }
+
+  /*
+  def foldGraph[A](graph: Graph, acc: A)(f: (A, Graph) => A): A = graph match {
+    case Row(_, columnList) => columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+    case Column(_, rowList) => rowList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+    case Head(_, columnList, rowList) =>
+      val newAcc = columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
+      rowList.foldLeft(newAcc)((acc, g) => foldGraph(g, acc)(f))
+  }
+   */
 }
 
