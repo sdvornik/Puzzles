@@ -1,5 +1,6 @@
 package com.solver
 
+
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
   */
@@ -28,24 +29,45 @@ object EntryPoint extends App {
     Array(3,3,4,1,1)
   ).map(_.map(_.toByte))
 
+  val puzzle5next: Array[Array[Byte]] = Array(
+    Array( 4, 4, 1, 2, 3),
+    Array( 1, 1, 5, 4, 4),
+    Array( 2, 5, 3, 4, 3),
+    Array( 4, 3, 1, 1, 5),
+    Array( 1, 1, 4, 5, 4)
+  ).map(_.map(_.toByte))
+  /*
+1 0 0 0 0
+0 1 0 1 0
+0 0 0 0 1
+0 0 1 0 0
+1 0 0 0 1
+   */
 
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle5)
+  val matrix = new Matrix(puzzle5next)
   val solver = new Solver(matrix)
-  val graphMap: Map[Head, Set[Point]] = solver.buildGraphMap
+  val coincidenceList = solver.buildCoincidenceList
+  val graphMap: List[(HeadNode, Set[Point])] = solver.buildGraphMap(coincidenceList)
   val variants: List[List[Point]] = solver.generateBoard(graphMap)
 
-  println(variants.size)
+  println(s"Total variants: ${variants.size}")
 
   val bitRepresentation = new BitBoardRepresentation(matrix.size)
-  variants.foreach { variant =>
-    solver.outputPoint(variant)
-    bitRepresentation.add(variant)
-    println(bitRepresentation.check)
-    bitRepresentation.clear()
-    println()
+  variants
+    .filter(variant => {
+      bitRepresentation.add(variant)
+      val check = bitRepresentation.check
+      bitRepresentation.clear()
+      check && solver.checkConsistency(coincidenceList, variant)
+    })
+    .toSet
+    .foreach((variant: List[Point]) => {
+      solver.outputPoint(variant)
+      solver.checkSimpleConnectivity(variant)
+      // println(s"Consistency: ${solver.checkConsistency(coincidenceList, variant)}")
 
-  }
+    })
 }

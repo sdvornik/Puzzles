@@ -6,21 +6,45 @@ import java.util
   * @author Serg Dvornik <sdvornik@yahoo.com>
   */
 
-case class Point(row: Byte, column: Byte) extends Ordered[Point] {
+sealed trait SuperPoint
+case object Pole extends SuperPoint
+case class Point(row: Byte, column: Byte) extends Ordered[Point] with SuperPoint {
+
   import scala.math.Ordered.orderingToOrdered
 
-  def compare(that: Point): Int = (this.row, this.column) compare (that.row, that.column)
+  def compare(that: Point): Int = (this.row, this.column) compare(that.row, that.column)
 }
 
-sealed trait Graph { val point: Point }
-sealed trait RowTrait extends Graph
-sealed trait ColumnTrait extends Graph
-case class Row(override val point: Point, columnList: List[Column]) extends RowTrait
-case class Column(override val point: Point, rowList: List[Row]) extends ColumnTrait
-case class Head(override val point: Point, columnList: List[Column], rowList: List[Row]) extends RowTrait with ColumnTrait
+final class UndirectedEdge(val point1: SuperPoint, val point2: SuperPoint) {
+  override def hashCode(): Int = point1.hashCode() | point2.hashCode()
+
+  override def equals(obj: scala.Any): Boolean = obj match {
+    case that: UndirectedEdge => (that.point1==this.point1 && this.point2 == that.point2) ||
+      (that.point1==this.point2 && this.point2 == that.point1)
+    case _ => false
+  }
+
+  override def toString: String = s"UndirectedEdge(${this.point1}, ${this.point2})"
+}
+
+sealed trait Node {
+  val point: Point
+}
+
+sealed trait RowNodeTrait extends Node
+
+sealed trait ColumnNodeTrait extends Node
+
+case class RowNode(override val point: Point, columnList: List[ColumnNode]) extends RowNodeTrait
+
+case class ColumnNode(override val point: Point, rowList: List[RowNode]) extends ColumnNodeTrait
+
+case class HeadNode(override val point: Point, columnList: List[ColumnNode], rowList: List[RowNode]) extends RowNodeTrait with ColumnNodeTrait
 
 sealed trait Color
+
 case object White extends Color
+
 case object Black extends Color
 
 class BitBoardRepresentation(private val size: Int) {
@@ -28,16 +52,16 @@ class BitBoardRepresentation(private val size: Int) {
   private val rowArr = new Array[Int](size)
   private val columnArr = new Array[Int](size)
 
-  private def add(point: Point): Unit = point match {
-    case Point(row, column) =>
-      rowArr(row) = rowArr(row) |  1 << (size-1-column)
-      columnArr(column) = columnArr(column) |  1 << (size-1-row)
-  }
-
   def add(listPoint: List[Point]): Unit = listPoint.foreach(p => add(p))
 
-  def check: Boolean = rowArr.drop(1).zip(rowArr).forall { case (a,b) => (a & b) == 0 } &&
-    columnArr.drop(1).zip(columnArr).forall { case (a,b) => (a & b) == 0 }
+  private def add(point: Point): Unit = point match {
+    case Point(row, column) =>
+      rowArr(row) = rowArr(row) | 1 << (size - 1 - column)
+      columnArr(column) = columnArr(column) | 1 << (size - 1 - row)
+  }
+
+  def check: Boolean = rowArr.drop(1).zip(rowArr).forall { case (a, b) => (a & b) == 0 } &&
+    columnArr.drop(1).zip(columnArr).forall { case (a, b) => (a & b) == 0 }
 
   def clear(): Unit = {
     util.Arrays.fill(rowArr, 0)
@@ -50,25 +74,24 @@ class Matrix(private val matrix: Array[Array[Byte]]) {
 
   val size: Int = matrix.length
 
-  def get(rowIdx: Int): Vector[Byte] = matrix(rowIdx).toVector
-
-  def get(rowIdx: Int, columnIdx: Int): Byte = matrix(rowIdx)(columnIdx)
+  def apply(rowIdx: Int, columnIdx: Int): Byte = matrix(rowIdx)(columnIdx)
 }
 
 class Solver(private val matrix: Matrix) {
-  private val size = matrix.size
+  type BoardState = List[Point]
 
   /*
   Find coincide number in row or column.
    */
+  private val size = matrix.size
 
-  def buildGraphMap: Map[Head, Set[Point]] = (for (i <- 0 until size; j <- 0 until size ) yield
-    (matrix.get(i, j), (i, j)))
+  def buildCoincidenceList: List[(Map[Byte, List[Byte]], Map[Byte, List[Byte]])] =
+    (for (i <- 0 until size; j <- 0 until size) yield (matrix(i, j), (i, j)))
     /*
     Group by value
      */
-    .foldLeft(Map.empty[Byte,List[(Byte,Byte)]]) {
-      case(acc, (value, (row, column))) =>
+    .foldLeft(Map.empty[Byte, List[(Byte, Byte)]]) {
+      case (acc, (value, (row, column))) =>
         acc + ((value, (row.toByte, column.toByte) :: acc.getOrElse(value, List.empty[(Byte, Byte)])))
     }
     /*
@@ -85,54 +108,56 @@ class Solver(private val matrix: Matrix) {
             )
         }
       )
-    }
+    }.toList
     /*
     Filter only coincidence case
      */
     .map {
-      case(_, (rowMap, columnMap)) =>
+      case (_, (rowMap, columnMap)) =>
         (
           rowMap.filter { case (_, columnIdxList) => columnIdxList.length > 1 },
           columnMap.filter { case (_, rowIdxList) => rowIdxList.length > 1 }
         )
     }
-    .filter { case(rowMap, columnMap) => rowMap.nonEmpty || columnMap.nonEmpty }
-    /*
-    Build Graph list
-     */
-    .flatMap {
-      case(rowMap, columnMap) =>
+    .filter { case (rowMap, columnMap) => rowMap.nonEmpty || columnMap.nonEmpty }
+
+  /*
+  Build Graph list
+   */
+  def buildGraphMap(list: List[(Map[Byte, List[Byte]], Map[Byte, List[Byte]])]): List[(HeadNode, Set[Point])] = {
+    list.flatMap {
+      case (rowMap, columnMap) =>
         val pointList = (
           rowMap.flatMap { case (row, listColumn) => listColumn.map(Point(row, _)) } ++
-          columnMap.flatMap { case (column, listRow) => listRow.map(Point(_, column)) }
-        ).toSet.toList.sorted
-        println(pointList)
-        println()
+            columnMap.flatMap { case (column, listRow) => listRow.map(Point(_, column)) }
+          ).toSet.toList.sorted
+
         buildGraph(pointList, rowMap, columnMap)
-    }.toMap
+    }
+  }
 
   def buildGraph(
                   pointList: List[Point],
                   rowMap: Map[Byte, List[Byte]],
                   columnMap: Map[Byte, List[Byte]]
-                ): Map[Head, Set[Point]] = {
+                ): Map[HeadNode, Set[Point]] = {
 
     def buildColumnGraph(
                           columnPointList: List[Point],
                           crossPointSet: Set[Point],
                           remainingPointSet: Set[Point]
-                        ): (List[Column], Set[Point], Set[Point]) = columnPointList
+                        ): (List[ColumnNode], Set[Point], Set[Point]) = columnPointList
 
-      .foldLeft((List.empty[Column], crossPointSet, remainingPointSet)) {
-        case ((graphListAcc, crossPointSetAcc, remainingPointSetAcc), point @ Point(row, column)) =>
+      .foldLeft((List.empty[ColumnNode], crossPointSet, remainingPointSet)) {
+        case ((graphListAcc, crossPointSetAcc, remainingPointSetAcc), point@Point(row, column)) =>
 
-          if(remainingPointSetAcc.contains(point)) {
+          if (remainingPointSetAcc.contains(point)) {
 
             val rowPointList = rowMap.getOrElse(row, List.empty).filter(_ != column).map(Point(row, _))
 
             val rowGraphTuple = buildRowGraph(rowPointList, crossPointSetAcc, remainingPointSetAcc - point)
 
-            val newGraph = Column(point, rowGraphTuple._1)
+            val newGraph = ColumnNode(point, rowGraphTuple._1)
 
             (newGraph :: graphListAcc, rowGraphTuple._2, rowGraphTuple._3)
           }
@@ -143,17 +168,17 @@ class Solver(private val matrix: Matrix) {
                        rowPointList: List[Point],
                        crossPointSet: Set[Point],
                        remainingPointSet: Set[Point]
-                     ): (List[Row], Set[Point], Set[Point]) = rowPointList
-      .foldLeft((List.empty[Row], crossPointSet, remainingPointSet)) {
-        case ((graphListAcc, crossPointSetAcc, remainingPointSetAcc), point @ Point(row, column)) =>
+                     ): (List[RowNode], Set[Point], Set[Point]) = rowPointList
+      .foldLeft((List.empty[RowNode], crossPointSet, remainingPointSet)) {
+        case ((graphListAcc, crossPointSetAcc, remainingPointSetAcc), point@Point(row, column)) =>
 
-          if(remainingPointSetAcc.contains(point)) {
+          if (remainingPointSetAcc.contains(point)) {
 
             val columnPointList = columnMap.getOrElse(column, List.empty).filter(_ != row).map(Point(_, column))
 
             val rowGraphTuple = buildColumnGraph(columnPointList, crossPointSetAcc, remainingPointSetAcc - point)
 
-            val newGraphListAcc = Row(point, rowGraphTuple._1) :: graphListAcc
+            val newGraphListAcc = RowNode(point, rowGraphTuple._1) :: graphListAcc
 
             (newGraphListAcc, rowGraphTuple._2, rowGraphTuple._3)
           }
@@ -161,12 +186,12 @@ class Solver(private val matrix: Matrix) {
       }
 
     def buildGraphRec(
-                       graphList: List[Head],
-                       crossPointMap: Map[Head, Set[Point]],
+                       graphList: List[HeadNode],
+                       crossPointMap: Map[HeadNode, Set[Point]],
                        pointList: List[Point]
-                     ): (List[Head], Map[Head, Set[Point]], List[Point]) =
+                     ): (List[HeadNode], Map[HeadNode, Set[Point]], List[Point]) =
       pointList match {
-        case (rootPoint @ Point(row, column)) :: xs =>
+        case (rootPoint@Point(row, column)) :: xs =>
 
           val columnPointList = (columnMap.getOrElse(column, List.empty).map(Point(_, column)).toSet - rootPoint).toList
 
@@ -176,61 +201,115 @@ class Solver(private val matrix: Matrix) {
 
           val rowGraphTuple = buildRowGraph(rowPointList: List[Point], columnGraphTuple._2, columnGraphTuple._3)
 
-          val head = Head(rootPoint, columnGraphTuple._1, rowGraphTuple._1)
+          val head = HeadNode(rootPoint, columnGraphTuple._1, rowGraphTuple._1)
 
           buildGraphRec(head :: graphList, crossPointMap + ((head, rowGraphTuple._2)), rowGraphTuple._3.toList.sorted)
 
         case Nil => (graphList, crossPointMap, pointList)
       }
 
-      buildGraphRec(List.empty[Head], Map.empty[Head, Set[Point]], pointList) match {
-        case res =>
-          (res._1.toSet -- res._2.keySet).map((_, Set.empty[Point])).toMap ++ res._2
-      }
+    buildGraphRec(List.empty[HeadNode], Map.empty[HeadNode, Set[Point]], pointList) match {
+      case res =>
+        (res._1.toSet -- res._2.keySet).map((_, Set.empty[Point])).toMap ++ res._2
+    }
   }
 
-  def combineVariants(listOfVariants: List[List[List[Point]]]): List[List[Point]] = listOfVariants
-    .foldLeft(List.empty: List[List[Point]]) {
-      case (acc: List[List[Point]], listElm: List[List[Point]]) =>
-        acc match {
-          case newAcc @ x :: xs => newAcc.flatMap(accElm => listElm.map( listElmElm => listElmElm ++ accElm))
-          case Nil => listElm
-        }
-    }
+  def generateBoard(graphMap: List[(HeadNode, Set[Point])]): List[BoardState] = {
 
-  def processList(graphList: List[Graph]): List[(Graph, List[Graph])] = graphList
-    .combinations(1).map(l => (l.head, (graphList.toSet -- l.toSet).toList)).toList
+    def generate(color: Color, graph: Node): List[BoardState] = {
 
-  def generateBoard(graphMap: Map[Head, Set[Point]]): List[List[Point]] = {
-
-    def generate(color: Color, graph: Graph): List[List[Point]] = {
       val (childRowNodeList, childColumnNodeList) = graph match {
-        case row: Row => (List.empty, row.columnList)
-        case column: Column => (column.rowList, List.empty)
-        case head: Head => (head.rowList, head.columnList)
+        case row: RowNode => (List.empty, row.columnList)
+        case column: ColumnNode => (column.rowList, List.empty)
+        case head: HeadNode => (head.rowList, head.columnList)
       }
       color match {
         case White =>
-          (childRowNodeList ++ childColumnNodeList).flatMap(g => generate(Black, g))
+          combineVariants((childRowNodeList ++ childColumnNodeList).map(g => generate(Black, g)))
 
         case Black =>
-
-          val rowList: List[List[List[Point]]] = processList(childRowNodeList).map {
-            case (whiteRowNode, blackRowNodeList) =>
-              generate(White, whiteRowNode) ++ blackRowNodeList.flatMap( blackRowNode => generate(Black, blackRowNode))
+          combineVariants(
+            processList(childRowNodeList).map {
+              case (whiteRowNode, blackRowNodeList) =>
+                generate(White, whiteRowNode) ++ blackRowNodeList.flatMap(blackRowNode => generate(Black, blackRowNode))
+            } ++
+            processList(childColumnNodeList).map {
+              case (whiteColumnNode, blackColumnNodeList) =>
+                generate(White, whiteColumnNode) ++ blackColumnNodeList.flatMap(blackColumnNode => generate(Black, blackColumnNode))
+            }
+          ) match {
+            case boardList@_ :: _ => boardList.map((list: BoardState) => graph.point :: list)
+            case Nil => List(graph.point :: Nil)
           }
-
-          val columnList: List[List[List[Point]]] = processList(childColumnNodeList).map {
-            case (whiteColumnNode, blackColumnNodeList) =>
-              generate(White, whiteColumnNode) ++ blackColumnNodeList.flatMap( blackColumnNode => generate(Black, blackColumnNode))
-          }
-
-          val res: List[List[Point]] = combineVariants(rowList ++ columnList).map(list => graph.point :: list)
-          if(res.isEmpty) List(List(graph.point)) else res
       }
     }
 
-    combineVariants(graphMap.keys.map( rootGraph => generate(Black, rootGraph) ++ generate(White, rootGraph)).toList)
+    combineVariants(graphMap.map {
+      case (rootGraph, _) => generate(Black, rootGraph) ++ generate(White, rootGraph)
+    })
+  }
+
+  def combineVariants(listOfVariants: List[List[BoardState]]): List[BoardState] = {
+    val bitRepr = new BitBoardRepresentation(size)
+    val res = listOfVariants
+      .filter(_.nonEmpty)
+      .foldLeft(List.empty: List[BoardState]) {
+        case (stateAcc: List[BoardState], stateList: List[BoardState]) =>
+          stateAcc match {
+            case _ :: _ => stateAcc.flatMap((stateFromAcc: BoardState) => stateList
+              .map(
+                (stateFromStateList: BoardState) => {
+                  stateFromStateList ++ stateFromAcc
+                }
+              )
+              .filter((state: BoardState) => {
+                bitRepr.add(state)
+                val check = bitRepr.check
+                bitRepr.clear()
+                check
+              })
+            )
+            case Nil => stateList
+          }
+      }
+    res
+  }
+
+  def processList(graphList: List[Node]): List[(Node, List[Node])] = graphList
+    .map(l => (l, (graphList.toSet - l).toList))
+
+  def checkConsistency(list: List[(Map[Byte, List[Byte]], Map[Byte, List[Byte]])], boardState: List[Point]): Boolean = {
+    val boardSet = boardState.toSet
+    list.map {
+      case (rowMap, columnMap) =>
+        rowMap.map {
+          case (row, columnList) =>
+            columnList.map(Point(row, _)).foldLeft(0)((acc, point) => if(boardSet.contains(point)) acc+1 else acc) == 1
+        }.forall(x => x) &&
+        columnMap.map {
+          case (column, rowList) =>
+            rowList.map(Point(_, column)).foldLeft(0)((acc, point) => if(boardSet.contains(point)) acc+1 else acc) == 1
+        }.forall(x => x)
+    }.forall(x => x)
+  }
+
+  //TODO
+  def checkSimpleConnectivity(boardState: List[Point]): Unit = {
+    val boardSet = boardState.toSet
+
+    val poleEdges: Set[UndirectedEdge] = boardState.filter(point =>
+      point.row == 0 || point.row == size - 1 || point.column == 0 || point.column == size - 1
+    )
+    .foldLeft(Set.empty: Set[UndirectedEdge]) ((acc, point) =>
+      acc + new UndirectedEdge(point, Pole)
+    )
+
+    val totalEdges: Set[UndirectedEdge] = boardState.foldLeft(poleEdges) { case (acc, pivotPoint @ Point(row, column)) =>
+        List(Point((row+1).toByte, (column+1).toByte), Point((row+1).toByte, (column-1).toByte))
+        .filter(boardSet.contains)
+        .foldLeft(acc) ((acc, point) => acc + new UndirectedEdge(pivotPoint, point))
+    }
+    println(totalEdges)
   }
 
   def outputPoint(res: List[Point]): Unit = {
@@ -238,24 +317,14 @@ class Solver(private val matrix: Matrix) {
     (for (
       i <- 0 until size;
       j <- 0 until size
-    ) yield Point(i.toByte,j.toByte)).foreach(
+    ) yield Point(i.toByte, j.toByte)).foreach(
       point => {
-        if(set.contains(point)) print(" 1 ")
+        if (set.contains(point)) print(" 1 ")
         else print(" 0 ")
-        if(point.column == size - 1 ) println()
+        if (point.column == size - 1) println()
       }
     )
-
+    println()
   }
-
-  /*
-  def foldGraph[A](graph: Graph, acc: A)(f: (A, Graph) => A): A = graph match {
-    case Row(_, columnList) => columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-    case Column(_, rowList) => rowList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-    case Head(_, columnList, rowList) =>
-      val newAcc = columnList.foldLeft(acc)((acc, g) => foldGraph(g, acc)(f))
-      rowList.foldLeft(newAcc)((acc, g) => foldGraph(g, acc)(f))
-  }
-   */
 }
 
