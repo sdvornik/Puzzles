@@ -25,6 +25,12 @@ final class UndirectedEdge(val point1: SuperPoint, val point2: SuperPoint) {
   }
 
   override def toString: String = s"UndirectedEdge(${this.point1}, ${this.point2})"
+
+  def getOtherVertex(point: SuperPoint): SuperPoint = {
+    if(point == point1) point2
+    else if(point == point2) point1
+    else throw new IllegalArgumentException("Edge not contain this point")
+  }
 }
 
 sealed trait Node {
@@ -293,8 +299,7 @@ class Solver(private val matrix: Matrix) {
     }.forall(x => x)
   }
 
-  //TODO
-  def checkSimpleConnectivity(boardState: List[Point]): Unit = {
+  def checkSimpleConnectivity(boardState: List[Point]): Boolean = {
     val boardSet = boardState.toSet
 
     val poleEdges: Set[UndirectedEdge] = boardState.filter(point =>
@@ -309,8 +314,36 @@ class Solver(private val matrix: Matrix) {
         .filter(boardSet.contains)
         .foldLeft(acc) ((acc, point) => acc + new UndirectedEdge(pivotPoint, point))
     }
-    println(totalEdges)
+    val connectedEdgeMap: Map[SuperPoint, Set[UndirectedEdge]] = totalEdges.foldLeft(Map.empty: Map[SuperPoint, Set[UndirectedEdge]]) ((acc, edge) =>
+      acc  + ((edge.point1, acc.getOrElse(edge.point1, Set.empty: Set[UndirectedEdge]) + edge))
+        + ((edge.point2, acc.getOrElse(edge.point2, Set.empty: Set[UndirectedEdge]) + edge))
+    )
+
+    def next( point: SuperPoint, isNotConnected: Boolean, processedPoints: Set[SuperPoint], processedEdges: Set[UndirectedEdge])
+    : (Boolean, Set[SuperPoint], Set[UndirectedEdge]) = {
+      val edgeSet = connectedEdgeMap.getOrElse(point, Set.empty)
+      (edgeSet -- processedEdges)
+        .foldLeft((isNotConnected, processedPoints, processedEdges)) {
+          case ((false, _, _),_) => (false, Set.empty, Set.empty)
+          case ((true, processedPointsAcc, processedEdgesAcc), edge) =>
+            val p = edge.getOtherVertex(point)
+            if (processedPoints.contains(p)) (false, Set.empty, Set.empty)
+            else next(p, isNotConnected = true, processedPointsAcc + point, processedEdgesAcc + edge)
+        }
+    }
+
+    connectedEdgeMap.keys.foldLeft((true, Set.empty: Set[SuperPoint], Set.empty: Set[UndirectedEdge])) {
+      case ((false, _, _), _) => (false, Set.empty, Set.empty)
+      case((true, processedPointAcc, processedEdgeAcc), point) =>
+
+        if(processedPointAcc.contains(point)) (true, processedPointAcc, processedEdgeAcc)
+        else next(point, isNotConnected = true, processedPointAcc, processedEdgeAcc)
+    } match {
+      case (true, _, _) => true
+      case _ => false
+    }
   }
+
 
   def outputPoint(res: List[Point]): Unit = {
     val set = res.toSet
