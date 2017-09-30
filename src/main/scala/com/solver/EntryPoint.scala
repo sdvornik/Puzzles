@@ -47,11 +47,11 @@ object EntryPoint extends App {
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle12)
+  val matrix = new Matrix(puzzle5next)
   val solver = new Solver(matrix)
   val coincidenceList = solver.buildCoincidenceList
   val graphMap: List[(HeadNode, Set[Point])] = solver.buildGraphMap(coincidenceList)
-  println(graphMap.mkString("\n"))
+  //println(graphMap.mkString("\n"))
   val variants: List[List[Point]] = solver.generateBoard(graphMap)
 
   println(s"Total variants: ${variants.size}")
@@ -62,7 +62,7 @@ object EntryPoint extends App {
       bitRepresentation.add(variant)
       val check = bitRepresentation.check
       bitRepresentation.clear()
-      check //&& solver.checkSimpleConnectivity(variant) && solver.checkConsistency(coincidenceList, variant)
+      check && solver.checkConsistency(coincidenceList, variant) && solver.checkSimpleConnectivity(variant)
     })
     .toSet
     .foreach((variant: List[Point]) => {

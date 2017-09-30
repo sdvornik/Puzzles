@@ -244,15 +244,25 @@ class Solver(private val matrix: Matrix) {
                 generate(White, whiteColumnNode) ++ blackColumnNodeList.flatMap(blackColumnNode => generate(Black, blackColumnNode))
             }
           ) match {
-            case boardList@_ :: _ => boardList.map((list: BoardState) => graph.point :: list)
+            case boardList@ _ :: _ => boardList.map((list: BoardState) => graph.point :: list)
+            case List(Nil) => List(graph.point :: Nil)
             case Nil => List(graph.point :: Nil)
           }
       }
     }
 
-    combineVariants(graphMap.map {
-      case (rootGraph, _) => generate(Black, rootGraph) ++ generate(White, rootGraph)
-    })
+    val headColorVariants = (0 until graphMap.size).foldRight(List.empty: List[List[Color]]) {
+      case (_, Nil) => List(List(Black), List(White))
+      case (_, acc) =>
+        acc.map(Black :: _) ++ acc.map(White :: _)
+    }
+
+    headColorVariants.flatMap(colorList =>
+      combineVariants(graphMap.zip(colorList).map {
+        case ((rootGraph, _), color) => generate(color, rootGraph)
+      })
+    )
+
   }
 
   def combineVariants(listOfVariants: List[List[BoardState]]): List[BoardState] = {
