@@ -21,7 +21,7 @@ object EntryPoint extends App {
     Array( 1, 11,  2,  8,  2, 11,  3,  6,  7,  4, 10,  2)
   ).map(_.map(_.toByte))
 
-  val puzzle5: Array[Array[Byte]] = Array(
+  val puzzle5_1: Array[Array[Byte]] = Array(
     Array(1,1,3,5,5),
     Array(4,2,5,3,1),
     Array(4,3,3,5,4),
@@ -29,29 +29,31 @@ object EntryPoint extends App {
     Array(3,3,4,1,1)
   ).map(_.map(_.toByte))
 
-  val puzzle5next: Array[Array[Byte]] = Array(
+  val puzzle5_2: Array[Array[Byte]] = Array(
     Array( 4, 4, 1, 2, 3),
     Array( 1, 1, 5, 4, 4),
     Array( 2, 5, 3, 4, 3),
     Array( 4, 3, 1, 1, 5),
     Array( 1, 1, 4, 5, 4)
   ).map(_.map(_.toByte))
-  /*
-1 0 0 0 0
-0 1 0 1 0
-0 0 0 0 1
-0 0 1 0 0
-1 0 0 0 1
-   */
+
+
+  val puzzle5_3: Array[Array[Byte]] = Array(
+    Array(1,2,3,4,5),
+    Array(2,3,4,5,1),
+    Array(3,4,5,1,2),
+    Array(4,5,1,2,3),
+    Array(5,4,3,2,1)
+  ).map(_.map(_.toByte))
 
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle5next)
+  val matrix = new Matrix(puzzle5_1)
   val solver = new Solver(matrix)
   val coincidenceList = solver.buildCoincidenceList
   val graphMap: List[(HeadNode, Set[Point])] = solver.buildGraphMap(coincidenceList)
-  //println(graphMap.mkString("\n"))
+
   val variants: List[List[Point]] = solver.generateBoard(graphMap)
 
   println(s"Total variants: ${variants.size}")
@@ -62,11 +64,12 @@ object EntryPoint extends App {
       bitRepresentation.add(variant)
       val check = bitRepresentation.check
       bitRepresentation.clear()
-      check && solver.checkConsistency(coincidenceList, variant) && solver.checkSimpleConnectivity(variant)
+      check && solver.checkFullConsistency(coincidenceList, variant) && solver.checkSimpleConnectivity(variant)
     })
     .toSet
     .foreach((variant: List[Point]) => {
       println("Result: ")
       solver.outputPoint(variant)
+      println(solver.checkSimpleConnectivity(variant))
     })
 }
