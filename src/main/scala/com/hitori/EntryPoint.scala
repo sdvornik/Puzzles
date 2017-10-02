@@ -1,4 +1,4 @@
-package com.solver
+package com.hitori
 
 
 
@@ -79,27 +79,11 @@ object EntryPoint extends App {
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle_6_1)
+  val matrix = new Matrix(puzzle_12)
   val solver = new Solver(matrix)
   val coincidenceList = solver.buildCoincidenceList
-  val graphMap: List[(HeadNode, Set[Point])] = solver.buildGraphMap(coincidenceList)
 
-  val variants: List[List[Point]] = solver.generateBoard(graphMap)
+  println(coincidenceList.mkString("\n"))
 
-  println(s"Total variants: ${variants.size}")
-
-  val bitRepresentation = new BitBoardRepresentation(matrix.size)
-  variants
-    .filter(variant => {
-      bitRepresentation.add(variant)
-      val check = bitRepresentation.check
-      bitRepresentation.clear()
-      check && solver.checkFullConsistency(coincidenceList, variant) && solver.checkSimpleConnectivity(variant)
-    })
-    .toSet
-    .foreach((variant: List[Point]) => {
-      println("Result: ")
-      solver.outputPoint(variant)
-      println(solver.checkSimpleConnectivity(variant))
-    })
 }
+

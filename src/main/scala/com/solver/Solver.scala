@@ -2,6 +2,8 @@ package com.solver
 
 import java.util
 
+import com.hitori.Matrix
+
 
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
@@ -231,8 +233,7 @@ class Solver(private val matrix: Matrix) {
     }
     val totalRes = color match {
       case White =>
-        val res = combineVariants((childRowNodeList ++ childColumnNodeList).map(g => generate(Black, g)))
-        res
+        combineVariants((childRowNodeList ++ childColumnNodeList).map(g => generate(Black, g)))
 
       case Black =>
         val res = combineVariants(
@@ -249,11 +250,7 @@ class Solver(private val matrix: Matrix) {
           case List(Nil) => List(graph.point :: Nil)
           case Nil => List(graph.point :: Nil)
         }
-        //println(res.size)
         res
-    }
-    if(graph.isInstanceOf[HeadNode]) {
-      println(graph.point+" "+totalRes)
     }
     totalRes
   }
@@ -267,7 +264,6 @@ class Solver(private val matrix: Matrix) {
           res.put((head, color), variants)
       }
     )
-    println(res.size)
     res
   }
 
