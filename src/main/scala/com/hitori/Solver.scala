@@ -1,7 +1,5 @@
 package com.hitori
 
-import com.solver.SuperPoint
-
 
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
@@ -49,7 +47,7 @@ class Solver(private val matrix: Matrix) {
    */
   private val size = matrix.size
 
-  def buildCoincidenceList: Map[Byte,(Map[Byte, List[Byte]], Map[Byte, List[Byte]])] =
+  def buildCoincidenceMap: Map[Byte,(Map[Byte, List[Byte]], Map[Byte, List[Byte]])] =
     (for (i <- 0 until size; j <- 0 until size) yield (matrix(i, j), (i, j)))
     /*
     Group by value
@@ -87,6 +85,22 @@ class Solver(private val matrix: Matrix) {
         )
     }
     .filter { case (_, (rowMap, columnMap)) => rowMap.nonEmpty || columnMap.nonEmpty }
+
+
+  def toPointSet(coincidenceTuple: (Map[Byte, List[Byte]], Map[Byte, List[Byte]])): Set[Point] = {
+    val (rowMap, columnMap) = coincidenceTuple
+    (rowMap.flatMap { case (row, columnList) => columnList.map(Point(row, _)) } ++
+    columnMap.flatMap { case (column, rowList) => rowList.map(Point(_, column)) }).toSet
+  }
+
+  def generateVariantsForWhitePoints(numberOfWhitePoints: Int, pointSet: Set[Point]): Iterator[Set[Point]] = {
+    pointSet.toList
+      .combinations(numberOfWhitePoints)
+      .filter(list => new BitBoardRepresentation(size).add(list).checkCharge)
+      .map(list => pointSet -- list)
+  }
+
+  def generateAllVariantsForCertainValue
 
   def buildEdges(coincidenceMap: Map[Byte,(Map[Byte, List[Byte]], Map[Byte, List[Byte]])]): Unit = coincidenceMap.map {
     case (value, (rowMap, columnMap)) =>

@@ -2,9 +2,6 @@ package com.solver
 
 import java.util
 
-import com.hitori.Matrix
-
-
 /**
   * @author Serg Dvornik <sdvornik@yahoo.com>
   */

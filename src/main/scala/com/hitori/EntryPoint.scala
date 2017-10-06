@@ -81,7 +81,7 @@ object EntryPoint extends App {
  */
   val matrix = new Matrix(puzzle_12)
   val solver = new Solver(matrix)
-  val coincidenceList = solver.buildCoincidenceList
+  val coincidenceList = solver.buildCoincidenceMap
 
   println(coincidenceList.mkString("\n"))
 
