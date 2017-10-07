@@ -79,11 +79,11 @@ object EntryPoint extends App {
   /*
   Program body
  */
-  val matrix = new Matrix(puzzle_12)
+  val matrix = new Matrix(puzzle_5_1)
   val solver = new Solver(matrix)
-  val coincidenceList = solver.buildCoincidenceMap
-
-  println(coincidenceList.mkString("\n"))
+  val coincidenceMap = solver.buildCoincidenceMap
+  val variants: List[BitBoardRepresentation] = solver.generateVariantsForAllValues(coincidenceMap)
+  println(variants.size)
 
 }
 

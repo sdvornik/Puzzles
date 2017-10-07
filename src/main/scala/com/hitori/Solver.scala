@@ -93,14 +93,42 @@ class Solver(private val matrix: Matrix) {
     columnMap.flatMap { case (column, rowList) => rowList.map(Point(_, column)) }).toSet
   }
 
-  def generateVariantsForWhitePoints(numberOfWhitePoints: Int, pointSet: Set[Point]): Iterator[Set[Point]] = {
-    pointSet.toList
-      .combinations(numberOfWhitePoints)
-      .filter(list => new BitBoardRepresentation(size).add(list).checkCharge)
-      .map(list => pointSet -- list)
+  def generateVariantsForWhitePoints(numberOfWhitePoints: Int, pointSet: Set[Point]): Iterator[Set[Point]] = pointSet
+    .toList
+    .combinations(numberOfWhitePoints)
+    .filter(list => new BitBoardRepresentation(size, list).checkCharge)
+    .map(list => pointSet -- list)
+
+
+  def generateAllVariantsForCertainValue(pointSet: Set[Point]): List[BitBoardRepresentation] = {
+
+    def genRec(number: Int, acc: List[BitBoardRepresentation]): List[BitBoardRepresentation] = {
+      generateVariantsForWhitePoints(number, pointSet)
+        .toList.map( set => new BitBoardRepresentation(size, set.toList) ) match {
+          case Nil => acc
+          case nonEmptyList =>
+            genRec(number + 1, nonEmptyList) ++ acc
+      }
+    }
+    genRec(0, List.empty).filter(_.checkNeighborhood)
   }
 
-  def generateAllVariantsForCertainValue
+  def generateVariantsForAllValues(coincidenceMap: Map[Byte,(Map[Byte, List[Byte]], Map[Byte, List[Byte]])]): List[BitBoardRepresentation] = {
+    val list: List[List[BitBoardRepresentation]] = coincidenceMap.map {
+      case(_, coincidenceTuple) => generateAllVariantsForCertainValue(toPointSet(coincidenceTuple))
+    }.toList
+    list.tail.foldLeft(list.head) ((acc, nextList) => acc
+      .flatMap( prevBoard =>
+        nextList.map( nextBoard =>
+          BitBoardRepresentation.combine(prevBoard, nextBoard)
+        )
+      )
+      .foldLeft(List.empty: List[BitBoardRepresentation]) {
+        case (resAcc, None) => resAcc
+        case (resAcc, Some(elm)) => elm :: resAcc
+      }
+    )
+  }
 
   def buildEdges(coincidenceMap: Map[Byte,(Map[Byte, List[Byte]], Map[Byte, List[Byte]])]): Unit = coincidenceMap.map {
     case (value, (rowMap, columnMap)) =>
