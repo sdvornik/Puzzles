@@ -92,7 +92,7 @@ class BitBoardTest extends JUnitSuite {
       case (value, mapTuple) => (value, solver.toPointSet(mapTuple))
     }
     val pointSet = pointSetMap(1.toByte)
-    assertTrue(solver.generateAllVariantsForCertainValue(pointSet).size == 4)
+    assertTrue(solver.generateAllVariantsForCertainValue(pointSet).size == 1)
   }
 
   @Test
@@ -121,6 +121,24 @@ class BitBoardTest extends JUnitSuite {
     val bitBoard4 = new BitBoardRepresentation(3, pointList4)
     assertTrue(bitBoard4.checkNeighborhood)
 
+  }
+
+  @Test
+  def checkToListConversion(): Unit = {
+    val startSet = Set(Point(0,0), Point(1,1), Point(2,2))
+    val repr = new BitBoardRepresentation(3, startSet.toList)
+    val endSet = repr.toPointList.toSet
+    assertTrue(startSet == endSet)
+  }
+
+  @Test
+  def checkCombine(): Unit = {
+    val startSet = Set(Point(0,0), Point(1,1), Point(2,2))
+    val addSet = Set(Point(0,2), Point(2,0))
+    val startRepr = new BitBoardRepresentation(3, startSet.toList)
+    val addRepr =  new BitBoardRepresentation(3, addSet.toList)
+    val combineOpt = BitBoardRepresentation.combine(startRepr, addRepr)
+    assertTrue(combineOpt.get.toPointList.toSet == startSet ++ addSet)
   }
 
 }

@@ -30,7 +30,7 @@ object BitBoardRepresentation {
     require(that.size == other.size)
     val accArr = new Array[Int](that.size)
     that.getRowRepr.zip(other.getRowRepr).zipWithIndex.foreach { case ((selfRow, otherRow), idx) =>
-      accArr(idx) = selfRow & otherRow
+      accArr(idx) = selfRow | otherRow
     }
     if(check(accArr)) Some(new BitBoardRepresentation(accArr)) else None
   }
@@ -75,4 +75,14 @@ final class BitBoardRepresentation(private val rowArr: Array[Int]) {
 
   def checkNeighborhood: Boolean = check(rowArr)
 
+  def toPointList: List[Point] = rowArr.zipWithIndex.foldLeft(List.empty: List[Point]) {
+    case (acc, (rowValue, rowIdx)) =>
+      acc ++ (0 until size).foldLeft(List.empty: List[Point])( (acc1, columnIdx) => {
+        val mask = 1 << (size - 1 - columnIdx)
+        if ((mask & rowValue) != 0) Point(rowIdx.toByte, columnIdx.toByte) :: acc1
+        else acc1
+      })
+  }
+
+  override def toString: String = toPointList.sorted.mkString(",")
 }
